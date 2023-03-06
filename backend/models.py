@@ -2,6 +2,11 @@ from django.db import models
 from django_quill.fields import QuillField
 import datetime
 from multiselectfield import MultiSelectField
+from celery import current_app
+from core.celery import app
+from celery.schedules import crontab
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+
 
 class BotUser(models.Model):
     class Lang(models.TextChoices):
@@ -36,7 +41,7 @@ class Post(models.Model):
         
     type = models.CharField(max_length=5, choices=PostType.choices, default=PostType.PHOTO)
     title = models.CharField(max_length=55, blank=True)
-    body = QuillField()
+    body = models.TextField()
     media = models.FileField(upload_to="uploads/", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -49,23 +54,56 @@ class Post(models.Model):
         return self.title if self.title else self.body[:55]
 
 class Ad(models.Model):
-    DAYS_OF_WEEK = (
-        ('Monday', 'Monday'),
-        ('Tuesday', 'Tuesday'),
-        ('Wednesday', 'Wednesday'),
-        ('Thursday', 'Thursday'),
-        ('Friday', 'Friday'),
-        ('Saturday', 'Saturday'),
-        ('Sunday', 'Sunday'),
+    name = models.CharField(
+        max_length=55, unique=True, blank=True, 
+        help_text="Short name of your Ad")
+    post = models.ForeignKey(
+        Post, on_delete=models.CASCADE,
+        help_text="Slect which post do you want to send to users.")
+    active = models.BooleanField(default=True)
+    clocked = models.ForeignKey(
+        ClockedSchedule, on_delete=models.CASCADE, null=True, blank=True,
+        help_text= ("Select time for sending AD."
+                    "If you will not set time, AD will be automatically sent after 5 seconds.")
     )
-    title = models.CharField(max_length=55, blank=True)
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="ad_post")
-    time = models.TimeField(default=datetime.time(8, 30))
-    days = MultiSelectField(verbose_name="Weekdays", choices=DAYS_OF_WEEK, max_length=255)
-    repeat = models.BooleanField(default=True)
     send_to = models.ManyToManyField(BotUser)
+    task_id = models.PositiveIntegerField(editable=False, blank=True, null=True)
     def save(self, *args, **kwargs):
-        if not self.title:
-            self.title = f"ad_{self.id}"
         super().save(*args, **kwargs)
+        if not self.name:
+            self.name = f"ad_{self.pk}"
+        if not self.clocked:
+            self.clocked = ClockedSchedule.objects.create(
+                clocked_time=datetime.datetime.now() + datetime.timedelta(seconds=5)
+            )
+        print(self.task_id, self.name)
+        
+        if self.task_id:
+            print("IN if ")
+            task = PeriodicTask.objects.get(pk=self.task_id)
+            task.name = self.name
+            task.enabled = self.active
+            task.clocked = self.clocked
+            task.save()
+        else:
+            task = PeriodicTask.objects.create(
+                name = self.name,
+                task = "backend.tasks.send_ad",
+                enabled = self.active,
+                clocked = self.clocked,
+                one_off = True,
+                args = f"[{self.id}]",
+            )
+            self.task_id = task.pk      
+        super().save(*args, **kwargs)
+          
+        
+    def delete(self, *args, **kwargs):
+        task = PeriodicTask.objects.get(pk=self.task_id)
+        print(task)
+        task.delete()
+        super().delete(*args, **kwargs)
+
+
+
         
