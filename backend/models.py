@@ -1,10 +1,5 @@
 from django.db import models
-from django_quill.fields import QuillField
 import datetime
-from multiselectfield import MultiSelectField
-from celery import current_app
-from core.celery import app
-from celery.schedules import crontab
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 
@@ -32,7 +27,16 @@ class BotUser(models.Model):
     # class Meta:
     #     verbose_name = 'Foydalanuvchi'
     #     verbose_name_plural = 'Foydalanuvchilar'
-      
+
+
+class Smile(models.Model):
+    char = models.CharField(max_length=10)
+    
+    def __str__(self) -> str:
+        return self.char
+    
+
+
 class Post(models.Model):
     class PostType(models.TextChoices):
         VIDEO = "video"
@@ -43,6 +47,7 @@ class Post(models.Model):
     title = models.CharField(max_length=55, blank=True)
     body = models.TextField()
     media = models.FileField(upload_to="uploads/", blank=True)
+    smiles = models.ManyToManyField(Smile)
     created_at = models.DateTimeField(auto_now_add=True)
     
     def save(self, *args, **kwargs):
@@ -52,6 +57,17 @@ class Post(models.Model):
         
     def __str__(self) -> str:
         return self.title if self.title else self.body[:55]
+
+
+
+class Reaction(models.Model):
+    smile = models.ForeignKey(Smile, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    user = models.ForeignKey(BotUser, on_delete=models.CASCADE)
+    
+    def __str__(self) -> str:
+        return f"{self.user} - {self.post} - {self.smile}"
+    
 
 class Ad(models.Model):
     name = models.CharField(
@@ -69,17 +85,17 @@ class Ad(models.Model):
     send_to = models.ManyToManyField(BotUser)
     task_id = models.PositiveIntegerField(editable=False, blank=True, null=True)
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if not self.name:
-            self.name = f"ad_{self.pk}"
         if not self.clocked:
             self.clocked = ClockedSchedule.objects.create(
                 clocked_time=datetime.datetime.now() + datetime.timedelta(seconds=5)
             )
-        print(self.task_id, self.name)
         
+        super().save(*args, **kwargs) # Save for id
+        
+        if not self.name:
+            self.name = f"ad_{self.pk}"
+                
         if self.task_id:
-            print("IN if ")
             task = PeriodicTask.objects.get(pk=self.task_id)
             task.name = self.name
             task.enabled = self.active
@@ -103,6 +119,9 @@ class Ad(models.Model):
         print(task)
         task.delete()
         super().delete(*args, **kwargs)
+    
+    def __str__(self) -> str:
+        return self.name
 
 
 
