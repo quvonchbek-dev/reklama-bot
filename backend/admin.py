@@ -12,12 +12,12 @@ class AdAdmin(admin.ModelAdmin):
     
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    list_display = ["title", "id", "type"]
-    list_filter = ["type", "title"]
+    list_display = ["title", "type", "body"]
+    list_filter = ["type"]
 
 @admin.register(Smile)
 class SmileAdmin(admin.ModelAdmin):
-    list_display = ["char"]
+    list_display = ["id", "char", ]
 
 @admin.register(Reaction)
 class ReactionAdmin(admin.ModelAdmin):

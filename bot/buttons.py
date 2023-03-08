@@ -1,6 +1,5 @@
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import utils
-import json
 
 def reaction_markup(post_id):
     btn = []

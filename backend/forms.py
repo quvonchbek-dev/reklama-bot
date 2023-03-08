@@ -1,4 +1,4 @@
 from django import forms
 
 
-widgets = { 'days': forms.CheckboxSelectMultiple }
+widgets = { 'smiles': forms.CheckboxSelectMultiple }

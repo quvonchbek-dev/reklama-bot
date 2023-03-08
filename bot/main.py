@@ -27,7 +27,6 @@ def start_message(message: Message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def call_back_handler(call: CallbackQuery):
-    print(call.data)
     jsn = json.loads(call.data)
     data, dtype = jsn["data"], jsn["type"]
     ch_id = call.message.chat.id
